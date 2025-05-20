@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 仮想環境
+venv/
+env/
+ENV/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# ログ
+*.log
+logs/
+
+# テスト
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Docker
+.docker/
+
+# モデル関連
+saved_model/
+*.h5
+*.pkl
+*.joblib
+
+# その他
+*.bak
+*.tmp
+*.temp
