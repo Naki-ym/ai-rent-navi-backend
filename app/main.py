@@ -25,4 +25,4 @@ async def predict_rent_endpoint(request: RentPredictionRequest):
   - **distance**: 最寄駅までの距離（分）
   - **rent**: 現在の家賃（円）
   """
-  return predict_rent(request) 
+  return predict_rent(request)

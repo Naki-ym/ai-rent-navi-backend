@@ -5,7 +5,7 @@ def predict_rent(request: RentPredictionRequest) -> RentPredictionResponse:
   モックの家賃予測ロジック
   実際のモデルが実装されるまでの仮実装
   """
-  # モックの予測ロジック
+  
   # 面積、築年数、駅からの距離から簡易的に予測家賃を計算
   base_price = 50000  # 基本家賃
   area_factor = request.area * 1000  # 1㎡あたり1000円
@@ -13,20 +13,28 @@ def predict_rent(request: RentPredictionRequest) -> RentPredictionResponse:
   distance_factor = max(0, 10 - request.distance) * 2000  # 駅からの距離による減額（10分を基準）
 
   predicted_rent = base_price + area_factor - age_factor - distance_factor
-  difference = request.rent - predicted_rent
-  is_reasonable = abs(difference) <= 10000  # 1万円以内の差額を許容
-
-  # メッセージの生成
-  if difference > 10000:
-    message = f"現在の家賃は相場より{difference:,.0f}円高いです。"
-  elif difference < -10000:
-    message = f"現在の家賃は相場より{abs(difference):,.0f}円安いです。"
+  
+  # 適正範囲の計算（予測家賃の±10%を適正範囲とする）
+  reasonable_range = {
+    "min": predicted_rent * 0.9,
+    "max": predicted_rent * 1.1
+  }
+  
+  # 価格評価の判定（5段階）
+  if request.rent < reasonable_range["min"]:
+    price_evaluation = 1  # 割安
+  elif request.rent < predicted_rent:
+    price_evaluation = 2  # 適正だが安い
+  elif request.rent == predicted_rent:
+    price_evaluation = 3  # 相場通り
+  elif request.rent <= reasonable_range["max"]:
+    price_evaluation = 4  # 適正だが高い
   else:
-    message = "現在の家賃は相場とほぼ同等です。"
+    price_evaluation = 5  # 割高
 
   return RentPredictionResponse(
+    input_conditions=request,
     predicted_rent=predicted_rent,
-    difference=difference,
-    is_reasonable=is_reasonable,
-    message=message
+    reasonable_range=reasonable_range,
+    price_evaluation=price_evaluation
   )
