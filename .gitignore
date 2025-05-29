@@ -47,10 +47,11 @@ htmlcov/
 .docker/
 
 # モデル関連
-saved_model/
+saved_models/
 *.h5
 *.pkl
 *.joblib
+*.keras
 
 # その他
 *.bak
