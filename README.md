@@ -12,21 +12,19 @@ backend/                 # バックエンド（FastAPI）
 │   │   └── routes.py   # ルーティング定義
 │   ├── core/           # コア機能
 │   │   ├── __init__.py
-│   │   └── config.py   # 設定ファイル
+│   │   └── model_loader.py   # モデル読み込み
 │   ├── models/         # データモデル
 │   │   ├── __init__.py
 │   │   └── schemas.py  # Pydanticモデル（リクエスト/レスポンスの型定義）
-│   │   └── enums.py    # 列挙型の定義
 │   ├── services/       # ビジネスロジック
 │   │   ├── __init__.py
 │   │   └── prediction.py # 予測ロジック
 │   └── main.py         # アプリケーションのエントリーポイント
-├── tests/              # テストコード
-│   ├── __init__.py
-│   └── test_api.py
-├── saved_model/        # 学習済みモデル
-│   └── rent_model/     # TensorFlow SavedModel
+├── saved_models/       # 学習済みモデル
+│   ├── model.keras     # TensorFlowモデル
+│   └── scaler.pkl      # スケーラー
 ├── Dockerfile          # バックエンド用Dockerfile
+├── docker-compose.yml  # Docker Compose設定
 ├── requirements.txt    # Python依存関係
 └── .gitignore
 ```
@@ -36,6 +34,7 @@ backend/                 # バックエンド（FastAPI）
 - FastAPI: 高速なAPIフレームワーク
 - Pydantic: データバリデーション
 - TensorFlow: 学習済みモデルの読み込みと推論
+- scikit-learn: データの前処理（StandardScaler）
 - Docker: コンテナ化
 
 ## データモデル（app/models）
@@ -50,29 +49,19 @@ backend/                 # バックエンド（FastAPI）
 
 ```python
 from pydantic import BaseModel, Field
-from typing import Optional
 
 class RentPredictionRequest(BaseModel):
     area: float = Field(..., description="面積（㎡）", gt=0)
     age: int = Field(..., description="築年数", ge=0)
-    distance: float = Field(..., description="最寄駅までの距離（分）", ge=0)
-    rent: float = Field(..., description="現在の家賃（円）", gt=0)
+    layout: int = Field(..., description="間取り（1:1K, 2:1DK, 3:1LDK, 4:2K, 5:2DK, 6:2LDK, 7:3K, 8:3DK, 9:3LDK, 10:4K, 11:4DK, 12:4LDK）", ge=1, le=12)
+    station_person: int = Field(..., description="駅の利用者数（千人/日）", ge=0)
+    rent: float = Field(..., description="現在の家賃（万円）", gt=0)
 
 class RentPredictionResponse(BaseModel):
-    predicted_rent: float = Field(..., description="予測家賃")
-    difference: float = Field(..., description="現在の家賃との差額")
-    is_reasonable: bool = Field(..., description="相場に対して適正かどうか")
-```
-
-### 使用例（enums.py）
-
-```python
-from enum import Enum
-
-class PropertyType(str, Enum):
-    APARTMENT = "apartment"
-    MANSION = "mansion"
-    HOUSE = "house"
+    input_conditions: RentPredictionRequest
+    predicted_rent: float
+    reasonable_range: dict
+    price_evaluation: int
 ```
 
 ## 開発環境のセットアップ
@@ -83,17 +72,14 @@ git clone [repository-url]
 cd rent_prediction/backend
 ```
 
-2. 環境変数の設定
+2. 学習済みモデルの配置
 ```bash
-cp .env.example .env
+# saved_models/ ディレクトリに以下を配置
+# - model.keras（TensorFlowモデル）
+# - scaler.pkl（スケーラー）
 ```
 
-3. 学習済みモデルの配置
-```bash
-# saved_model/rent_model/ ディレクトリに学習済みモデルを配置
-```
-
-4. Dockerコンテナの起動
+3. Dockerコンテナの起動
 ```bash
 docker-compose up --build
 ```
@@ -109,17 +95,27 @@ docker-compose up --build
 {
   "area": float,          // 面積（㎡）
   "age": int,            // 築年数
-  "distance": float,     // 最寄駅までの距離（分）
-  "rent": float         // 現在の家賃（円）
+  "layout": int,         // 間取り（1-12）
+  "station_person": int, // 駅の利用者数（千人/日）
+  "rent": float         // 現在の家賃（万円）
 }
 ```
 - レスポンス:
 ```json
 {
-  "predicted_rent": float,  // 予測家賃
-  "difference": float,      // 現在の家賃との差額
-  "is_reasonable": boolean  // 相場に対して適正かどうか
-  "message": string        // 相場との比較メッセージ
+  "input_conditions": {
+    "area": float,
+    "age": int,
+    "layout": int,
+    "station_person": int,
+    "rent": float
+  },
+  "predicted_rent": float,  // 予測家賃（万円）
+  "reasonable_range": {
+    "min": float,  // 適正価格の下限（万円）
+    "max": float   // 適正価格の上限（万円）
+  },
+  "price_evaluation": int  // 価格評価（1:割安, 2:適正だが安い, 3:相場通り, 4:適正だが高い, 5:割高）
 }
 ```
 
@@ -137,50 +133,55 @@ docker-compose up --build
 基本ケース:
 ```json
 {
-    "area": 50,
+    "area": 30.0,
     "age": 5,
-    "distance": 5,
-    "rent": 80000
+    "layout": 3,
+    "station_person": 100,
+    "rent": 8.0
 }
 ```
 
 高めの家賃:
 ```json
 {
-    "area": 50,
+    "area": 30.0,
     "age": 5,
-    "distance": 5,
-    "rent": 100000
+    "layout": 3,
+    "station_person": 100,
+    "rent": 10.0
 }
 ```
 
 安めの家賃:
 ```json
 {
-    "area": 50,
+    "area": 30.0,
     "age": 5,
-    "distance": 5,
-    "rent": 60000
+    "layout": 3,
+    "station_person": 100,
+    "rent": 6.0
 }
 ```
 
 古い物件:
 ```json
 {
-    "area": 50,
+    "area": 30.0,
     "age": 30,
-    "distance": 5,
-    "rent": 80000
+    "layout": 3,
+    "station_person": 100,
+    "rent": 8.0
 }
 ```
 
-駅から遠い物件:
+駅の利用者数が多い物件:
 ```json
 {
-    "area": 50,
+    "area": 30.0,
     "age": 5,
-    "distance": 20,
-    "rent": 80000
+    "layout": 3,
+    "station_person": 500,
+    "rent": 8.0
 }
 ```
 
@@ -189,46 +190,22 @@ docker-compose up --build
 負の値:
 ```json
 {
-    "area": -50,
+    "area": -30.0,
     "age": 5,
-    "distance": 5,
-    "rent": 80000
+    "layout": 3,
+    "station_person": 100,
+    "rent": 8.0
 }
 ```
 
-不正な型:
+不正な間取り:
 ```json
 {
-    "area": "50",
+    "area": 30.0,
     "age": 5,
-    "distance": 5,
-    "rent": 80000
-}
-```
-
-### 期待されるレスポンス
-
-正常系のレスポンス例:
-```json
-{
-    "predicted_rent": 85000,
-    "difference": -5000,
-    "is_reasonable": true,
-    "message": "現在の家賃は相場とほぼ同等です。"
-}
-```
-
-エラー時のレスポンス例:
-```json
-{
-    "detail": [
-        {
-            "loc": ["body", "area"],
-            "msg": "ensure this value is greater than 0",
-            "type": "value_error.number.not_gt",
-            "ctx": {"limit_value": 0}
-        }
-    ]
+    "layout": 13,
+    "station_person": 100,
+    "rent": 8.0
 }
 ```
 
