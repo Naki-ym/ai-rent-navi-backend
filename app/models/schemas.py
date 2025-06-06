@@ -3,8 +3,9 @@ from pydantic import BaseModel, Field
 class RentPredictionRequest(BaseModel):
   area: float = Field(..., description="面積（㎡）", gt=0)
   age: int = Field(..., description="築年数", ge=0)
-  distance: float = Field(..., description="最寄駅までの距離（分）", ge=0)
-  rent: float = Field(..., description="現在の家賃（円）", gt=0)
+  layout: int = Field(..., description="間取り（1:1K, 2:1DK, 3:1LDK, 4:2K, 5:2DK, 6:2LDK, 7:3K, 8:3DK, 9:3LDK, 10:4K, 11:4DK, 12:4LDK）", ge=1, le=12)
+  station_person: int = Field(..., description="駅の利用者数（千人/日）", ge=0)
+  rent: float = Field(..., description="現在の家賃（万円）", gt=0)
 
 class RentPredictionResponse(BaseModel):
   # 入力された条件

@@ -1,20 +1,22 @@
 from app.models.schemas import RentPredictionRequest, RentPredictionResponse
+from app.core.model_loader import get_model, get_scaler
+import numpy as np
 
 def predict_rent(request: RentPredictionRequest) -> RentPredictionResponse:
-  """
-  モックの家賃予測ロジック
-  実際のモデルが実装されるまでの仮実装
-  """
+  model = get_model()
+  scaler = get_scaler()
   
-  # 面積、築年数、駅からの距離から簡易的に予測家賃を計算
-  base_price = 50000  # 基本家賃
-  area_factor = request.area * 1000  # 1㎡あたり1000円
-  age_factor = max(0, 20 - request.age) * 1000  # 築年数による減額（20年を基準）
-  distance_factor = max(0, 10 - request.distance) * 2000  # 駅からの距離による減額（10分を基準）
-
-  predicted_rent = base_price + area_factor - age_factor - distance_factor
+  # 4つの特徴量を正しい順序で設定
+  input_data = np.array([[
+    request.area,      # 面積_数値
+    request.age,       # 築年数
+    request.layout,    # 間取り
+    request.station_person  # station_person
+  ]], dtype=np.float32)
   
-  # 適正範囲の計算（予測家賃の±10%を適正範囲とする）
+  input_data_scaled = scaler.transform(input_data)
+  predicted_rent = float(model.predict(input_data_scaled)[0][0])
+  
   reasonable_range = {
     "min": predicted_rent * 0.9,
     "max": predicted_rent * 1.1
