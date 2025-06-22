@@ -1,0 +1,32 @@
+# 本番環境用 Dockerfile
+
+# ベースイメージとして、軽量なpython:3.11-slimを使用
+FROM python:3.11-slim
+
+# 作業ディレクトリを設定
+WORKDIR /app
+
+# セキュリティ向上のため、rootではない一般ユーザーを作成して使用
+RUN useradd -m appuser
+USER appuser
+
+# requirements.txtをコピーし、依存関係をインストール
+# --chownでファイルの所有者をappuserに設定
+COPY --chown=appuser:appuser requirements.txt .
+# --userフラグでユーザーのホームディレクトリにパッケージをインストール
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# アプリケーションコードをコピー
+COPY --chown=appuser:appuser . .
+
+# ユーザーのローカルbinディレクトリをPATHに追加（pip install --userでインストールされたコマンドを実行するため）
+ENV PATH="/home/appuser/.local/bin:${PATH}"
+
+# Pythonがモジュールを探すためのパスを設定
+ENV PYTHONPATH=/app
+
+# コンテナがリッスンするポートを8000に設定
+EXPOSE 8000
+
+# アプリケーションを起動（--reloadフラグは本番環境では不要なため削除）
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
