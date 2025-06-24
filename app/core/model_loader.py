@@ -2,9 +2,9 @@ import tensorflow as tf
 import joblib
 import os
 
-# 相対パスに修正
-MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "saved_models", "model_suginami.keras")
-SCALER_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "saved_models", "scaler_suginami.pkl")
+# パス修正
+MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "saved_models", "model.keras")
+SCALER_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "saved_models", "scaler.pkl")
 
 _model = None
 _scaler = None

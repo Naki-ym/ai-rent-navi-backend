@@ -1,6 +1,7 @@
 from app.models.schemas import RentPredictionRequest, RentPredictionResponse
 from app.core.model_loader import get_model, get_scaler
 import numpy as np
+import pandas as pd
 
 def predict_rent(request: RentPredictionRequest) -> RentPredictionResponse:
   model = get_model()
@@ -10,8 +11,6 @@ def predict_rent(request: RentPredictionRequest) -> RentPredictionResponse:
   input_data = np.array([[
     request.area,      # 面積_数値
     request.age,       # 築年数
-    request.layout,    # 間取り
-    request.station_person  # station_person
   ]], dtype=np.float32)
   
   input_data_scaled = scaler.transform(input_data)
