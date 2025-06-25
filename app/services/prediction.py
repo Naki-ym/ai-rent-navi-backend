@@ -1,7 +1,6 @@
 from app.models.schemas import RentPredictionRequest, RentPredictionResponse
 from app.core.model_loader import get_model, get_scaler
 import numpy as np
-import pandas as pd
 
 def predict_rent(request: RentPredictionRequest) -> RentPredictionResponse:
   model = get_model()
