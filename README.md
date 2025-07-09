@@ -1,6 +1,6 @@
 # 家賃相場予測アプリケーション - バックエンド
 
-このプロジェクトは、家賃相場予測アプリケーションのバックエンド部分です。FastAPIを使用して、物件情報と家賃を入力すると、その家賃が相場と比較してどうなのかを予測するAPIを提供します。予測には事前に学習済みのTensorFlowモデルを使用します。
+このプロジェクトは、家賃相場予測アプリケーションのバックエンド部分です。FastAPIを使用して、物件情報と家賃を入力すると、その家賃が相場と比較してどうなのかを予測するAPIを提供します。予測には事前に学習済みのTensorFlowモデルを使用し、入力データに基づいて適切なモデルを自動選択します。
 
 ## プロジェクト構成
 
@@ -12,7 +12,7 @@ backend/                 # バックエンド（FastAPI）
 │   │   └── routes.py   # ルーティング定義
 │   ├── core/           # コア機能
 │   │   ├── __init__.py
-│   │   └── model_loader.py   # モデル読み込み
+│   │   └── model_loader.py   # モデル読み込み・選択
 │   ├── models/         # データモデル
 │   │   ├── __init__.py
 │   │   └── schemas.py  # Pydanticモデル（リクエスト/レスポンスの型定義）
@@ -21,8 +21,20 @@ backend/                 # バックエンド（FastAPI）
 │   │   └── prediction.py # 予測ロジック
 │   └── main.py         # アプリケーションのエントリーポイント
 ├── saved_models/       # 学習済みモデル
-│   ├── model.keras     # TensorFlowモデル
-│   └── scaler.pkl      # スケーラー
+│   ├── suginami/       # 地域別モデル
+│   │   ├── base/       # 基本モデル（必須パラメータのみ）
+│   │   │   ├── model.keras
+│   │   │   └── scaler.pkl
+│   │   ├── kanrihi/    # 管理費を含むモデル
+│   │   │   ├── model.keras
+│   │   │   └── scaler.pkl
+│   │   ├── soukosuu/   # 総戸数を含むモデル
+│   │   │   ├── model.keras
+│   │   │   └── scaler.pkl
+│   │   └── full/       # 全特徴量を含むモデル
+│   │       ├── model.keras
+│   │       └── scaler.pkl
+│   └── config.json     # モデル設定ファイル
 ├── Dockerfile          # バックエンド用Dockerfile
 ├── docker-compose.yml  # Docker Compose設定
 ├── requirements.txt    # Python依存関係
@@ -37,6 +49,28 @@ backend/                 # バックエンド（FastAPI）
 - scikit-learn: データの前処理（StandardScaler）
 - Docker: コンテナ化
 
+## マルチモデル対応
+
+このシステムは、入力データに基づいて適切なモデルを自動選択します：
+
+### 基本特徴量（必須）
+- 面積（㎡）
+- 築年数
+- 間取り
+- 駅利用者数（千人/日）
+
+### 追加特徴量（任意）
+- 管理費（万円）
+- 総戸数
+
+### モデル選択ロジック
+1. **base**: 基本特徴量のみ
+2. **kanrihi**: 基本特徴量 + 管理費
+3. **soukosuu**: 基本特徴量 + 総戸数
+4. **full**: 基本特徴量 + 管理費 + 総戸数
+
+入力された任意パラメータの有無に基づいて、最適なモデルが自動選択されます。
+
 ## データモデル（app/models）
 
 `app/models` ディレクトリでは、APIのリクエストとレスポンスの型定義を行います。主な役割は：
@@ -49,16 +83,24 @@ backend/                 # バックエンド（FastAPI）
 
 ```python
 from pydantic import BaseModel, Field
+from typing import Optional
 
 class RentPredictionRequest(BaseModel):
+    # 必須パラメータ
     area: float = Field(..., description="面積（㎡）", gt=0)
     age: int = Field(..., description="築年数", ge=0)
-    layout: int = Field(..., description="間取り（1:1K, 2:1DK, 3:1LDK, 4:2K, 5:2DK, 6:2LDK, 7:3K, 8:3DK, 9:3LDK, 10:4K, 11:4DK, 12:4LDK）", ge=1, le=12)
+    layout: int = Field(..., description="間取り（1-12）", ge=1, le=12)
     station_person: int = Field(..., description="駅の利用者数（千人/日）", ge=0)
     rent: float = Field(..., description="現在の家賃（万円）", gt=0)
+    region: str = Field(..., description="地域名（例: suginami）")
+    
+    # 任意パラメータ
+    kanrihi: Optional[float] = Field(None, description="管理費（万円）", gt=0)
+    soukosuu: Optional[int] = Field(None, description="総戸数", gt=0)
 
 class RentPredictionResponse(BaseModel):
     input_conditions: RentPredictionRequest
+    model_info: dict  # 使用されたモデルの情報
     predicted_rent: float
     reasonable_range: dict
     price_evaluation: int
@@ -75,8 +117,14 @@ cd rent_prediction/backend
 2. 学習済みモデルの配置
 ```bash
 # saved_models/ ディレクトリに以下を配置
-# - model.keras（TensorFlowモデル）
-# - scaler.pkl（スケーラー）
+# - suginami/base/model.keras（基本モデル）
+# - suginami/base/scaler.pkl（基本スケーラー）
+# - suginami/kanrihi/model.keras（管理費モデル）
+# - suginami/kanrihi/scaler.pkl（管理費スケーラー）
+# - suginami/soukosuu/model.keras（総戸数モデル）
+# - suginami/soukosuu/scaler.pkl（総戸数スケーラー）
+# - suginami/full/model.keras（全特徴量モデル）
+# - suginami/full/scaler.pkl（全特徴量スケーラー）
 ```
 
 3. Dockerコンテナの起動
@@ -85,6 +133,12 @@ docker-compose up --build
 ```
 
 ## API仕様
+
+### 利用可能モデル情報取得API
+
+- エンドポイント: `/api/v1/models`
+- メソッド: GET
+- レスポンス: 利用可能な地域とモデルの情報
 
 ### 家賃相場予測API
 
@@ -97,7 +151,10 @@ docker-compose up --build
   "age": int,            // 築年数
   "layout": int,         // 間取り（1-12）
   "station_person": int, // 駅の利用者数（千人/日）
-  "rent": float         // 現在の家賃（万円）
+  "rent": float,         // 現在の家賃（万円）
+  "region": string,      // 地域名（例: suginami）
+  "kanrihi": float,      // 管理費（万円）- 任意
+  "soukosuu": int        // 総戸数 - 任意
 }
 ```
 - レスポンス:
@@ -108,7 +165,15 @@ docker-compose up --build
     "age": int,
     "layout": int,
     "station_person": int,
-    "rent": float
+    "rent": float,
+    "region": string,
+    "kanrihi": float,
+    "soukosuu": int
+  },
+  "model_info": {
+    "region": string,
+    "model_type": string,
+    "features": [string]
   },
   "predicted_rent": float,  // 予測家賃（万円）
   "reasonable_range": {
@@ -130,58 +195,55 @@ docker-compose up --build
 
 2. **テストケース例**
 
-基本ケース:
+基本モデル（必須パラメータのみ）:
 ```json
 {
     "area": 30.0,
     "age": 5,
     "layout": 3,
     "station_person": 100,
-    "rent": 8.0
+    "rent": 8.0,
+    "region": "suginami"
 }
 ```
 
-高めの家賃:
+管理費を含むモデル:
 ```json
 {
     "area": 30.0,
     "age": 5,
     "layout": 3,
     "station_person": 100,
-    "rent": 10.0
+    "rent": 8.0,
+    "region": "suginami",
+    "kanrihi": 1.5
 }
 ```
 
-安めの家賃:
+総戸数を含むモデル:
 ```json
 {
     "area": 30.0,
     "age": 5,
     "layout": 3,
     "station_person": 100,
-    "rent": 6.0
+    "rent": 8.0,
+    "region": "suginami",
+    "soukosuu": 50
 }
 ```
 
-古い物件:
-```json
-{
-    "area": 30.0,
-    "age": 30,
-    "layout": 3,
-    "station_person": 100,
-    "rent": 8.0
-}
-```
-
-駅の利用者数が多い物件:
+全特徴量を含むモデル:
 ```json
 {
     "area": 30.0,
     "age": 5,
     "layout": 3,
-    "station_person": 500,
-    "rent": 8.0
+    "station_person": 100,
+    "rent": 8.0,
+    "region": "suginami",
+    "kanrihi": 1.5,
+    "soukosuu": 50
 }
 ```
 
@@ -194,7 +256,8 @@ docker-compose up --build
     "age": 5,
     "layout": 3,
     "station_person": 100,
-    "rent": 8.0
+    "rent": 8.0,
+    "region": "suginami"
 }
 ```
 
@@ -205,7 +268,8 @@ docker-compose up --build
     "age": 5,
     "layout": 13,
     "station_person": 100,
-    "rent": 8.0
+    "rent": 8.0,
+    "region": "suginami"
 }
 ```
 
