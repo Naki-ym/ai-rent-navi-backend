@@ -12,15 +12,19 @@ backend/                 # バックエンド（FastAPI）
 │   │   └── routes.py   # ルーティング定義
 │   ├── core/           # コア機能
 │   │   ├── __init__.py
-│   │   └── model_loader.py   # モデル読み込み・選択
+│   │   ├── feature_mapper.py  # 特徴量マッピング
+│   │   ├── logging_config.py  # ログ設定
+│   │   └── model_loader.py    # モデル読み込み・選択
 │   ├── models/         # データモデル
 │   │   ├── __init__.py
+│   │   ├── config.py   # 設定モデル
 │   │   └── schemas.py  # Pydanticモデル（リクエスト/レスポンスの型定義）
 │   ├── services/       # ビジネスロジック
 │   │   ├── __init__.py
 │   │   └── prediction.py # 予測ロジック
 │   └── main.py         # アプリケーションのエントリーポイント
 ├── saved_models/       # 学習済みモデル
+│   ├── config.json     # モデル設定ファイル（全地域・モデル情報）
 │   ├── suginami/       # 地域別モデル
 │   │   ├── base/       # 基本モデル（必須パラメータのみ）
 │   │   │   ├── model.keras
@@ -34,7 +38,7 @@ backend/                 # バックエンド（FastAPI）
 │   │   └── full/       # 全特徴量を含むモデル
 │   │       ├── model.keras
 │   │       └── scaler.pkl
-│   └── config.json     # モデル設定ファイル
+│   └── [他の地域]/     # 他の地域モデル（musashino, kitaku, nakanoku, nerimaku）
 ├── Dockerfile          # バックエンド用Dockerfile
 ├── docker-compose.yml  # Docker Compose設定
 ├── requirements.txt    # Python依存関係
@@ -49,27 +53,48 @@ backend/                 # バックエンド（FastAPI）
 - scikit-learn: データの前処理（StandardScaler）
 - Docker: コンテナ化
 
-## マルチモデル対応
+## 自動モデル選択システム
 
-このシステムは、入力データに基づいて適切なモデルを自動選択します：
+このシステムは、`config.json`の情報と入力データに基づいて最適なモデルを自動選択します：
 
 ### 基本特徴量（必須）
 - 面積（㎡）
 - 築年数
-- 間取り
+- 間取り（1-12）
 - 駅利用者数（千人/日）
 
 ### 追加特徴量（任意）
 - 管理費（万円）
 - 総戸数
 
-### モデル選択ロジック
-1. **base**: 基本特徴量のみ
-2. **kanrihi**: 基本特徴量 + 管理費
-3. **soukosuu**: 基本特徴量 + 総戸数
-4. **full**: 基本特徴量 + 管理費 + 総戸数
+### 自動モデル選択ロジック
+1. **基本モデル（base）**: 基本特徴量のみ使用
+2. **管理費モデル（kanrihi）**: 基本特徴量 + 管理費
+3. **総戸数モデル（soukosuu）**: 基本特徴量 + 総戸数
+4. **全特徴量モデル（full）**: 基本特徴量 + 管理費 + 総戸数
 
-入力された任意パラメータの有無に基づいて、最適なモデルが自動選択されます。
+システムは入力された特徴量を分析し、利用可能な特徴量を最大限活用できるモデルを自動選択します。
+
+### config.jsonの構造
+```json
+{
+  "regions": {
+    "suginami": {
+      "name": "杉並区",
+      "models": {
+        "base": {
+          "features": ["area", "age", "layout", "station_person"],
+          "required_features": ["area", "age", "layout", "station_person"]
+        },
+        "kanrihi": {
+          "features": ["area", "age", "layout", "station_person", "management_fee"],
+          "required_features": ["area", "age", "layout", "station_person", "management_fee"]
+        }
+      }
+    }
+  }
+}
+```
 
 ## データモデル（app/models）
 
@@ -94,9 +119,9 @@ class RentPredictionRequest(BaseModel):
     rent: float = Field(..., description="現在の家賃（万円）", gt=0)
     region: str = Field(..., description="地域名（例: suginami）")
     
-    # 任意パラメータ
-    kanrihi: Optional[float] = Field(None, description="管理費（万円）", gt=0)
-    soukosuu: Optional[int] = Field(None, description="総戸数", gt=0)
+    # 任意パラメータ（config.jsonの特徴量名に統一）
+    management_fee: Optional[float] = Field(None, description="管理費（万円）", ge=0)
+    total_units: Optional[int] = Field(None, description="総戸数", gt=0)
 
 class RentPredictionResponse(BaseModel):
     input_conditions: RentPredictionRequest
@@ -147,14 +172,14 @@ docker-compose up --build
 - リクエストボディ:
 ```json
 {
-  "area": float,          // 面積（㎡）
-  "age": int,            // 築年数
-  "layout": int,         // 間取り（1-12）
-  "station_person": int, // 駅の利用者数（千人/日）
-  "rent": float,         // 現在の家賃（万円）
-  "region": string,      // 地域名（例: suginami）
-  "kanrihi": float,      // 管理費（万円）- 任意
-  "soukosuu": int        // 総戸数 - 任意
+  "area": float,                // 面積（㎡）
+  "age": int,                   // 築年数
+  "layout": int,                // 間取り（1-12）
+  "station_person": int,        // 駅の利用者数（千人/日）
+  "rent": float,                // 現在の家賃（万円）
+  "region": string,             // 地域名（例: suginami）
+  "management_fee": float,      // 管理費（万円）- 任意
+  "total_units": int            // 総戸数 - 任意
 }
 ```
 - レスポンス:
@@ -167,24 +192,87 @@ docker-compose up --build
     "station_person": int,
     "rent": float,
     "region": string,
-    "kanrihi": float,
-    "soukosuu": int
+    "management_fee": float,
+    "total_units": int
   },
   "model_info": {
-    "region": string,
-    "model_type": string,
-    "features": [string]
+    "description": string,      // モデルの説明
+    "features": [string],       // 使用された特徴量
+    "required_features": [string],  // 必須特徴量
+    "optional_features": [string]   // 任意特徴量
   },
-  "predicted_rent": float,  // 予測家賃（万円）
+  "predicted_rent": float,      // 予測家賃（万円）
   "reasonable_range": {
-    "min": float,  // 適正価格の下限（万円）
-    "max": float   // 適正価格の上限（万円）
+    "min": float,               // 適正価格の下限（万円）
+    "max": float                // 適正価格の上限（万円）
   },
-  "price_evaluation": int  // 価格評価（1:割安, 2:適正だが安い, 3:相場通り, 4:適正だが高い, 5:割高）
+  "price_evaluation": int       // 価格評価（1:割安, 2:適正だが安い, 3:相場通り, 4:適正だが高い, 5:割高）
 }
 ```
 
 ## APIのテスト方法
+
+### cURLを使用したテスト例
+
+**基本モデル（必須パラメータのみ）**:
+```bash
+curl -X POST "http://localhost:8000/api/v1/predict" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "area": 30.0,
+    "age": 5,
+    "layout": 3,
+    "station_person": 100,
+    "rent": 10.0,
+    "region": "suginami"
+  }'
+```
+
+**管理費モデル**:
+```bash
+curl -X POST "http://localhost:8000/api/v1/predict" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "area": 30.0,
+    "age": 5,
+    "layout": 3,
+    "station_person": 100,
+    "rent": 10.0,
+    "management_fee": 1.5,
+    "region": "suginami"
+  }'
+```
+
+**総戸数モデル**:
+```bash
+curl -X POST "http://localhost:8000/api/v1/predict" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "area": 30.0,
+    "age": 5,
+    "layout": 3,
+    "station_person": 100,
+    "rent": 10.0,
+    "total_units": 50,
+    "region": "suginami"
+  }'
+```
+
+**全特徴量モデル**:
+```bash
+curl -X POST "http://localhost:8000/api/v1/predict" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "area": 30.0,
+    "age": 5,
+    "layout": 3,
+    "station_person": 100,
+    "rent": 10.0,
+    "management_fee": 1.5,
+    "total_units": 50,
+    "region": "suginami"
+  }'
+```
 
 ### Postmanを使用したテスト
 
@@ -216,7 +304,7 @@ docker-compose up --build
     "station_person": 100,
     "rent": 8.0,
     "region": "suginami",
-    "kanrihi": 1.5
+    "management_fee": 1.5
 }
 ```
 
@@ -229,7 +317,7 @@ docker-compose up --build
     "station_person": 100,
     "rent": 8.0,
     "region": "suginami",
-    "soukosuu": 50
+    "total_units": 50
 }
 ```
 
@@ -242,8 +330,8 @@ docker-compose up --build
     "station_person": 100,
     "rent": 8.0,
     "region": "suginami",
-    "kanrihi": 1.5,
-    "soukosuu": 50
+    "management_fee": 1.5,
+    "total_units": 50
 }
 ```
 
@@ -272,6 +360,32 @@ docker-compose up --build
     "region": "suginami"
 }
 ```
+
+不正な地域名:
+```json
+{
+    "area": 30.0,
+    "age": 5,
+    "layout": 3,
+    "station_person": 100,
+    "rent": 8.0,
+    "region": "invalid_region"
+}
+```
+
+## 対応地域
+
+現在、以下の地域に対応しています：
+
+- **suginami**: 杉並区
+- **musashino**: 武蔵野市
+- **kitaku**: 北区
+- **nakanoku**: 中野区
+- **nerimaku**: 練馬区
+
+新しい地域の追加方法：
+1. 該当地域のモデルファイルを`saved_models/[地域名]/`に配置
+2. `config.json`に地域とモデル情報を追加
 
 ## 開発ガイドライン
 
