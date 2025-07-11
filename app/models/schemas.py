@@ -9,16 +9,12 @@ class RentPredictionRequest(BaseModel):
   station_person: int = Field(..., description="駅の利用者数（千人/日）", ge=0)
   rent: float = Field(..., description="現在の家賃（万円）", gt=0)
 
-  # 任意パラメータ
-  kanrihi: Optional[float] = Field(None, description="管理費（万円）", gt=0)
-  soukosuu: Optional[int] = Field(None, description="総戸数", gt=0)
-
-  # fullモデル用の追加パラメータ
-  structure: Optional[int] = Field(None, description="建物構造（1:RC, 2:S, 3:SRC, 4:木造）", ge=1, le=4)
-  station_distance: Optional[float] = Field(None, description="最寄り駅までの距離（分）", gt=0)
+  # 任意パラメータ（config.jsonの特徴量名に統一）
+  management_fee: Optional[float] = Field(None, description="管理費（万円）", ge=0)
+  total_units: Optional[int] = Field(None, description="総戸数", gt=0)
 
   # 地域情報
-  region: str = Field(..., description="地域名（例: suginami）")
+  region: str = Field(..., description="地域名（suginami, musashino, kitaku, nakanoku, nerimaku）")
 
 class RentPredictionResponse(BaseModel):
   # 入力された条件

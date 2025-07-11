@@ -1,12 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
 
-class FeatureDescription(BaseModel):
-  """特徴量の説明情報"""
-  name: str = Field(..., description="特徴量名")
-  unit: str = Field(..., description="単位")
-  description: str = Field(..., description="説明")
-
 class ModelConfig(BaseModel):
   """モデル設定情報"""
   description: str = Field(..., description="モデルの説明")
@@ -30,4 +24,6 @@ class ModelInfo(BaseModel):
 class AppConfig(BaseModel):
   """アプリケーション全体の設定"""
   regions: Dict[str, RegionConfig] = Field(..., description="地域別設定")
-  feature_descriptions: Dict[str, FeatureDescription] = Field(..., description="特徴量の説明") 
+  model_format: str = Field(..., description="モデルの形式")
+  scaler_format: str = Field(..., description="スケーラーの形式")
+  last_updated: str = Field(..., description="最終更新日時") 

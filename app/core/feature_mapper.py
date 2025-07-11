@@ -9,22 +9,18 @@ class FeatureMapper:
 
   # 特徴量のデフォルト値
   DEFAULT_VALUES = {
-    "structure": 1,        # RC
-    "station_distance": 5.0,  # 5分
-    "kanrihi": 0.0,        # 0万円
-    "soukosuu": 0          # 0戸
+    "management_fee": 0.0,    # 0万円
+    "total_units": 0          # 0戸
   }
 
-  # 特徴量の抽出関数マッピング
+  # 特徴量の抽出関数マッピング（config.jsonの特徴量名に統一）
   FEATURE_EXTRACTORS: Dict[str, Callable[[RentPredictionRequest], Any]] = {
     "area": lambda req: req.area,
     "age": lambda req: req.age,
     "layout": lambda req: req.layout,
     "station_person": lambda req: req.station_person,
-    "structure": lambda req: req.structure or FeatureMapper.DEFAULT_VALUES["structure"],
-    "station_distance": lambda req: req.station_distance or FeatureMapper.DEFAULT_VALUES["station_distance"],
-    "kanrihi": lambda req: req.kanrihi or FeatureMapper.DEFAULT_VALUES["kanrihi"],
-    "soukosuu": lambda req: req.soukosuu or FeatureMapper.DEFAULT_VALUES["soukosuu"]
+    "management_fee": lambda req: req.management_fee or FeatureMapper.DEFAULT_VALUES["management_fee"],
+    "total_units": lambda req: req.total_units or FeatureMapper.DEFAULT_VALUES["total_units"]
   }
 
   @classmethod
