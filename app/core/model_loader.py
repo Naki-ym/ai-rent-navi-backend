@@ -237,7 +237,16 @@ class ModelLoader:
     # モデルとスケーラーの取得
     model = self.get_model(request.region, model_type)
     scaler = self.get_scaler(request.region, model_type)
-    model_info = config.regions[request.region].models[model_type]
+    model_config = config.regions[request.region].models[model_type]
+    
+    # ModelInfoクラスを使って地域情報を含めた情報を作成
+    model_info = ModelInfo(
+      region=request.region,
+      region_name=config.regions[request.region].name,
+      model_type=model_type,
+      features=model_config.features,
+      description=model_config.description
+    )
     
     logger.info(f"モデルとスケーラーの取得が完了しました: {request.region}_{model_type}")
     

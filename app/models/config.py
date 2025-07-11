@@ -16,7 +16,8 @@ class RegionConfig(BaseModel):
 
 class ModelInfo(BaseModel):
   """モデル情報"""
-  region: str = Field(..., description="地域名")
+  region: str = Field(..., description="地域コード")
+  region_name: str = Field(..., description="地域名")
   model_type: str = Field(..., description="モデルタイプ")
   features: List[str] = Field(..., description="使用する特徴量のリスト")
   description: str = Field(..., description="モデルの説明")
