@@ -107,12 +107,15 @@ async def predict_rent_endpoint(request: RentPredictionRequest):
   - **region**: 地域名（例: suginami）
   
   任意パラメータ:
-  - **kanrihi**: 管理費（万円）
-  - **soukosuu**: 総戸数
-  - **structure**: 建物構造（1:RC, 2:S, 3:SRC, 4:木造）
-  - **station_distance**: 最寄り駅までの距離（分）
+  - **management_fee**: 管理費（万円）
+  - **total_units**: 総戸数
   
   入力されたパラメータに基づいて適切なモデルが自動選択されます。
+  利用可能なモデル：
+  - **base**: 基本モデル（面積、築年数、間取り、駅利用者数）
+  - **kanrihi**: 管理費モデル（基本特徴量＋管理費）
+  - **soukosuu**: 総戸数モデル（基本特徴量＋総戸数）
+  - **full**: 全特徴量モデル（基本特徴量＋管理費＋総戸数）
   
   Returns:
     RentPredictionResponse: 予測結果

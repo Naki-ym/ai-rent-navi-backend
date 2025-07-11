@@ -79,28 +79,59 @@ class ModelLoader:
         raise
     return _config_cache
 
-  def determine_model_type(self, request: RentPredictionRequest) -> str:
+  def determine_model_type(self, request: RentPredictionRequest, config: AppConfig) -> str:
     """
-    入力データに基づいて適切なモデルタイプを決定
+    入力データとconfig.jsonの情報に基づいて適切なモデルタイプを決定
     
     Args:
       request: 予測リクエスト
+      config: アプリケーション設定
     
     Returns:
       str: モデルタイプ
     """
-    has_kanrihi = request.kanrihi is not None
-    has_soukosuu = request.soukosuu is not None
-    has_structure = request.structure is not None
-    has_station_distance = request.station_distance is not None
-    if has_kanrihi and has_soukosuu and has_structure and has_station_distance:
-      return "full"
-    elif has_kanrihi:
-      return "kanrihi"
-    elif has_soukosuu:
-      return "soukosuu"
-    else:
-      return "base"
+    # 利用可能な特徴量を確認
+    available_features = set()
+    
+    # 基本特徴量は常に利用可能
+    available_features.update(["area", "age", "layout", "station_person"])
+    
+    # 任意特徴量の確認
+    if request.management_fee is not None:
+      available_features.add("management_fee")
+    if request.total_units is not None:
+      available_features.add("total_units")
+    
+    # 地域のモデル情報を取得
+    region_models = config.regions[request.region].models
+    
+    # 最適なモデルを選択（より多くの特徴量を使用するモデルを優先）
+    best_model = None
+    best_score = 0
+    
+    for model_name, model_info in region_models.items():
+      # このモデルが使用する特徴量のうち、利用可能な特徴量の数を計算
+      model_features = set(model_info.features)
+      available_model_features = model_features.intersection(available_features)
+      
+      # 必須特徴量がすべて利用可能か確認
+      required_features = set(model_info.required_features)
+      if not required_features.issubset(available_features):
+        continue
+      
+      # スコアを計算（利用可能な特徴量の数）
+      score = len(available_model_features)
+      
+      if score > best_score:
+        best_score = score
+        best_model = model_name
+    
+    # デフォルトはbaseモデル
+    if best_model is None:
+      best_model = "base"
+    
+    logger.info(f"選択されたモデル: {best_model} (利用可能特徴量: {list(available_features)})")
+    return best_model
 
   def get_model(self, region: str, model_type: str) -> tf.keras.Model:
     """
@@ -181,3 +212,58 @@ class ModelLoader:
         - 選択されたモデル
         - 対応するスケーラー
         - モデル情報
+    
+    Raises:
+      ValueError: 指定された地域またはモデルタイプが見つからない場合
+    """
+    config = self.load_config()
+    
+    # 地域の存在確認
+    if request.region not in config.regions:
+      available_regions = list(config.regions.keys())
+      logger.error(f"指定された地域が見つかりません: {request.region}")
+      raise ValueError(f"指定された地域が見つかりません: {request.region}. 利用可能な地域: {available_regions}")
+    
+    # モデルタイプの決定
+    model_type = self.determine_model_type(request, config)
+    logger.info(f"モデルタイプを決定しました: {model_type}")
+    
+    # モデルタイプの存在確認
+    if model_type not in config.regions[request.region].models:
+      available_models = list(config.regions[request.region].models.keys())
+      logger.error(f"指定されたモデルタイプが見つかりません: {model_type}")
+      raise ValueError(f"指定されたモデルタイプが見つかりません: {model_type}. 利用可能なモデル: {available_models}")
+    
+    # モデルとスケーラーの取得
+    model = self.get_model(request.region, model_type)
+    scaler = self.get_scaler(request.region, model_type)
+    model_config = config.regions[request.region].models[model_type]
+    
+    # ModelInfoクラスを使って地域情報を含めた情報を作成
+    model_info = ModelInfo(
+      region=request.region,
+      region_name=config.regions[request.region].name,
+      model_type=model_type,
+      features=model_config.features,
+      description=model_config.description
+    )
+    
+    logger.info(f"モデルとスケーラーの取得が完了しました: {request.region}_{model_type}")
+    
+    return model, scaler, model_info
+
+
+# グローバル関数（後方互換性のため）
+_model_loader = ModelLoader()
+
+def get_model_and_scaler(request: RentPredictionRequest) -> Tuple[tf.keras.Model, Any, ModelInfo]:
+  """
+  後方互換性のためのグローバル関数
+  
+  Args:
+    request: 予測リクエスト
+  
+  Returns:
+    Tuple[tf.keras.Model, Any, ModelInfo]: モデル、スケーラー、モデル情報
+  """
+  return _model_loader.get_model_and_scaler(request)
