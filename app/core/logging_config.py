@@ -13,8 +13,7 @@ def setup_logging() -> None:
     format=log_format,
     datefmt=date_format,
     handlers=[
-      logging.StreamHandler(sys.stdout),
-      logging.FileHandler("app.log")
+      logging.StreamHandler(sys.stdout)
     ]
   )
   # 特定のライブラリのログレベルを調整
